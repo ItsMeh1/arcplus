@@ -71,7 +71,27 @@
   function currentPfp() { return state.profile.pfp || state.profile.photoURL || state.profile.photo || state.profile.avatar || state.user?.photoURL || ''; }
   function gameCover(game) { return game.cover || './offline/logo.png'; }
   function luminImageToken(game) { return game?.__raw?.image_token || game?.__raw?.imageToken || game?.__raw?.thumbnail_token || game?.__raw?.thumbnailToken || game?.__raw?.image?.token || ''; }
-  async function hydrateLuminImages(root=document) { if(!window.Lumin?.getImageUrl)return; const cards=[...root.querySelectorAll('[data-lumin-id]')].slice(0,24); await Promise.allSettled(cards.map(async card=>{ const game=state.onlineGames.find(g=>g.id===card.dataset.gameId); const token=luminImageToken(game); if(!game)return;if(!token){const direct=game.__raw?.image_url||game.__raw?.thumbnail_url||game.__raw?.image||game.__raw?.thumbnail;if(typeof direct==='string'){const img=card.querySelector('img[data-lumin-image]');if(img)img.src=direct;}return;} try{const value=await window.Lumin.getImageUrl(token);const url=typeof value==='string'?value:(value?.url||value?.image_url||'');const img=card.querySelector('img[data-lumin-image]');if(url&&img){game.cover=url;img.src=url;}}catch{}})); }
+  async function hydrateLuminImages(root=document) {
+    if(!window.Lumin?.getImageUrl) return;
+    const cards=[...root.querySelectorAll('[data-lumin-id]')];
+    await Promise.allSettled(cards.map(async card=>{
+      const game=state.onlineGames.find(g=>String(g.id)===String(card.dataset.gameId));
+      if(!game) return;
+      const raw=game.__raw || game;
+      const token=raw.image_token || raw.imageToken || game.image_token || game.imageToken || luminImageToken(game);
+      const img=card.querySelector('img[data-lumin-image]');
+      if(!img || !token) return;
+      try {
+        const url=await window.Lumin.getImageUrl(token);
+        if(typeof url==='string' && url) {
+          game.cover=url;
+          img.src=url;
+        }
+      } catch(error) {
+        console.warn('[Flash Games] Lumin thumbnail failed for', game.name, error);
+      }
+    }));
+  }
   function installedSet() { return new Set(state.installed.map((game) => game.id)); }
 
   function sortGames(list) {
@@ -174,7 +194,7 @@
     const online = game.zone === 'LUMIN';
     const exclusive = game.source === 'Flash Exclusive' || game.zone === 'FLASH EXCLUSIVE';
     const badge = exclusive ? 'Flash Exclusive' : online ? 'Online' : installed ? 'Downloaded' : 'Not downloaded';
-    return `<article class="game-card" data-game-id="${esc(game.id)}"><div class="cover"><img loading="lazy" src="${esc(gameCover(game))}" alt="${esc(game.name)}" onerror="this.onerror=null;this.src='./offline/logo.png'"><span class="badge">${badge}</span><div class="card-overlay"><button class="expand-action play" data-game-action="play" aria-label="Play ${esc(game.name)}">${icon('play')}<span>Play</span></button>${online || exclusive || installed ? '' : `<button class="expand-action" data-game-action="install" aria-label="Download ${esc(game.name)}">${icon('download')}<span>Download</span></button>`}</div></div><div class="card-body"><div class="card-title"><h3>${esc(game.name)}</h3><span class="rating">${icon(online ? 'wifi' : exclusive ? 'zap' : installed ? 'check' : 'hard-drive-download')} </span></div><div class="meta"><span class="tag">${esc(online ? 'Lumin' : exclusive ? 'Flash Exclusive' : game.category || 'Offline+')}</span></div></div></article>`;
+    return `<article class="game-card" data-game-id="${esc(game.id)}"${online ? ` data-lumin-id="${esc(game.luminId || game.id)}"` : ''}><div class="cover"><img loading="lazy" src="${esc(gameCover(game))}" alt="${esc(game.name)}"${online ? ' data-lumin-image' : ''} onerror="this.onerror=null;this.src='./offline/logo.png'"><span class="badge">${badge}</span><div class="card-overlay"><button class="expand-action play" data-game-action="play" aria-label="Play ${esc(game.name)}">${icon('play')}<span>Play</span></button>${online || exclusive || installed ? '' : `<button class="expand-action" data-game-action="install" aria-label="Download ${esc(game.name)}">${icon('download')}<span>Download</span></button>`}</div></div><div class="card-body"><div class="card-title"><h3>${esc(game.name)}</h3><span class="rating">${icon(online ? 'wifi' : exclusive ? 'zap' : installed ? 'check' : 'hard-drive-download')} </span></div><div class="meta"><span class="tag">${esc(online ? 'Lumin' : exclusive ? 'Flash Exclusive' : game.category || 'Offline+')}</span></div></div></article>`;
   }
 
   async function renderGames() {
